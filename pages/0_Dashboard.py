@@ -146,7 +146,8 @@ with left:
 
                 if pd.notna(row["city"]):
                     st.write(
-                        f"**Location:** {str(row['city']).title()}, {row['state']}"
+                        f"**Location:** "
+                        f"{str(row['city']).title()}, {row['state']}"
                     )
 
 
@@ -245,7 +246,8 @@ with right:
     )
 
     st.caption(
-        "Use the Risk Map page for the full overview of all at-risk accounts."
+        "Use the Risk Map page for the full overview "
+        "of all at-risk accounts."
     )
 
 
@@ -267,7 +269,6 @@ selected_account = st.selectbox(
     "Select account",
     top_accounts["account_id"].tolist(),
 )
-
 
 selected_risk = top_accounts[
     top_accounts["account_id"] == selected_account
@@ -358,7 +359,6 @@ c.metric(
     f"{selected_risk['risk_score']:,.0f}",
 )
 
-
 detail_left, detail_right = st.columns(2)
 
 with detail_left:
@@ -430,11 +430,11 @@ if st.button(
 
     try:
         client = genai.Client(
-    api_key=st.secrets["GEMINI_API_KEY"],
-    http_options=types.HttpOptions(
-        timeout=30_000
-    )
-)
+            api_key=st.secrets["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(
+                timeout=30_000
+            ),
+        )
 
         review_value = (
             f"{average_review:.1f} out of 5"
@@ -494,31 +494,32 @@ RULES
 """
 
         with st.spinner("Generating recommendation..."):
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-            config={
-                "max_output_tokens": 300,
-                "thinking_config": {
-                    "thinking_level": "low",
-                },
-            },
-        )
-    except Exception:
-        # Fallback if Gemini 3.8 Flash is overloaded or times out
-        response = client.models.generate_content(
-            model="gemini-3.7-flash",
-            contents=prompt,
-            config={
-                "max_output_tokens": 300,
-                "thinking_config": {
-                    "thinking_level": "low",
-                },
-            },
-        )
 
-st.markdown(response.text)
+            try:
+                response = client.models.generate_content(
+                    model="gemini-3.8-flash",
+                    contents=prompt,
+                    config={
+                        "max_output_tokens": 300,
+                        "thinking_config": {
+                            "thinking_level": "low",
+                        },
+                    },
+                )
+
+            except Exception:
+                response = client.models.generate_content(
+                    model="gemini-3.7-flash",
+                    contents=prompt,
+                    config={
+                        "max_output_tokens": 300,
+                        "thinking_config": {
+                            "thinking_level": "low",
+                        },
+                    },
+                )
+
+        st.markdown(response.text)
 
     except KeyError:
 
