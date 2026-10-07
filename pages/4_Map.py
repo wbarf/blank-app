@@ -4,6 +4,25 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
+st.markdown(
+
+    """
+
+    <style>
+
+    h1, h2, h3 {
+
+        color: #00843D !important;
+
+    }
+
+    </style>
+
+    """,
+
+    unsafe_allow_html=True,
+
+)
 
 # --------------------------------------------------
 # DATA
