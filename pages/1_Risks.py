@@ -1,7 +1,24 @@
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
+
+
+# --------------------------------------------------
+# STYLING
+# --------------------------------------------------
+
+st.markdown(
+    """
+    <style>
+    h1, h2, h3 {
+        color: #00843D !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # --------------------------------------------------
@@ -19,7 +36,10 @@ def load_data():
 
     orders = pd.read_csv(
         data_dir / "order_lines.csv",
-        dtype={"account_id": str, "order_id": str},
+        dtype={
+            "account_id": str,
+            "order_id": str,
+        },
     )
 
     orders["order_date"] = pd.to_datetime(
@@ -49,7 +69,8 @@ st.title("At-Risk Accounts")
 
 st.write(
     "Explore the 50 highest-priority at-risk accounts. "
-    "Accounts are ranked by Priority Score: predicted churn risk × customer value."
+    "Accounts are ranked by Priority Score: "
+    "predicted churn risk × customer value."
 )
 
 st.divider()
@@ -88,6 +109,7 @@ st.subheader("Filter accounts")
 filter1, filter2 = st.columns(2)
 
 with filter1:
+
     minimum_risk = st.slider(
         "Minimum predicted churn risk",
         min_value=0,
@@ -98,6 +120,7 @@ with filter1:
     )
 
 with filter2:
+
     minimum_value = st.number_input(
         "Minimum customer value ($)",
         min_value=0,
@@ -113,7 +136,8 @@ filtered = risks[
 
 
 st.caption(
-    f"Showing {len(filtered)} of {len(risks)} at-risk accounts."
+    f"Showing {len(filtered)} of "
+    f"{len(risks)} at-risk accounts."
 )
 
 
@@ -159,8 +183,9 @@ st.dataframe(
 )
 
 st.caption(
-    "A high churn probability alone does not automatically mean highest priority. "
-    "Priority also considers the historical value of the account."
+    "A high churn probability alone does not automatically "
+    "mean highest priority. Priority also considers the "
+    "historical value of the account."
 )
 
 st.divider()
@@ -170,12 +195,16 @@ st.divider()
 # ACCOUNT DEEP DIVE
 # --------------------------------------------------
 
-st.header("Account Risk Profile")
+st.header(
+    "Account Risk Profile"
+)
 
 if filtered.empty:
+
     st.info(
         "No accounts match the selected filters."
     )
+
     st.stop()
 
 
@@ -238,20 +267,33 @@ m3.metric(
 )
 
 if pd.notna(average_review):
+
     m4.metric(
         "Average review",
         f"{average_review:.1f} / 5",
     )
+
 else:
+
     m4.metric(
         "Average review",
         "No data",
     )
 
 
-st.write(
-    f"**Last order:** {latest_order_date.strftime('%d %B %Y')}"
-)
+if pd.notna(latest_order_date):
+
+    st.write(
+        f"**Last order:** "
+        f"{latest_order_date.strftime('%d %B %Y')}"
+    )
+
+else:
+
+    st.write(
+        "**Last order:** No order data"
+    )
+
 
 st.write(
     f"**Late deliveries:** {late_orders}"
@@ -262,7 +304,9 @@ st.write(
 # ORDER HISTORY BY MONTH
 # --------------------------------------------------
 
-st.subheader("Ordering behaviour")
+st.subheader(
+    "Ordering behaviour"
+)
 
 monthly_orders = (
     account_orders
@@ -271,16 +315,65 @@ monthly_orders = (
     .resample("MS")
     .size()
     .rename("Orders")
+    .reset_index()
 )
 
 st.caption(
-    "Monthly order count shows whether the customer's usual ordering rhythm "
-    "has weakened or stopped."
+    "Monthly order count shows whether the customer's "
+    "usual ordering rhythm has weakened or stopped."
 )
 
-st.line_chart(
-    monthly_orders,
+
+# --------------------------------------------------
+# DYNAMIC ORDER HISTORY CHART
+# --------------------------------------------------
+
+order_chart = (
+    alt.Chart(monthly_orders)
+    .mark_line(
+        point=True,
+        strokeWidth=3,
+        color="#00843D",
+    )
+    .encode(
+        x=alt.X(
+            "order_date:T",
+            title="Month",
+            axis=alt.Axis(
+                format="%b %Y",
+                labelAngle=-45,
+            ),
+        ),
+        y=alt.Y(
+            "Orders:Q",
+            title="Orders",
+            scale=alt.Scale(
+                zero=True
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "order_date:T",
+                title="Month",
+                format="%B %Y",
+            ),
+            alt.Tooltip(
+                "Orders:Q",
+                title="Orders",
+                format=".0f",
+            ),
+        ],
+    )
+    .properties(
+        height=320
+    )
+    .interactive()
+)
+
+st.altair_chart(
+    order_chart,
     use_container_width=True,
+    theme="streamlit",
 )
 
 
@@ -288,27 +381,80 @@ st.line_chart(
 # MONTHLY SPEND
 # --------------------------------------------------
 
-st.subheader("Monthly spend")
+st.subheader(
+    "Monthly spend"
+)
 
 monthly_spend = (
     account_orders
+    .assign(
+        month=account_orders[
+            "order_date"
+        ].dt.to_period("M")
+    )
     .groupby(
-        account_orders["order_date"].dt.to_period("M")
+        "month"
     )["price"]
     .sum()
+    .reset_index()
 )
 
-monthly_spend.index = (
-    monthly_spend.index.astype(str)
+monthly_spend["month"] = (
+    monthly_spend["month"]
+    .dt.to_timestamp()
 )
 
-monthly_spend = monthly_spend.rename(
-    "Spend ($)"
+
+# --------------------------------------------------
+# DYNAMIC MONTHLY SPEND CHART
+# --------------------------------------------------
+
+spend_chart = (
+    alt.Chart(monthly_spend)
+    .mark_bar(
+        color="#00843D",
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3,
+    )
+    .encode(
+        x=alt.X(
+            "month:T",
+            title="Month",
+            axis=alt.Axis(
+                format="%b %Y",
+                labelAngle=-45,
+            ),
+        ),
+        y=alt.Y(
+            "price:Q",
+            title="Spend ($)",
+            scale=alt.Scale(
+                zero=True
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "month:T",
+                title="Month",
+                format="%B %Y",
+            ),
+            alt.Tooltip(
+                "price:Q",
+                title="Spend",
+                format="$,.2f",
+            ),
+        ],
+    )
+    .properties(
+        height=320
+    )
+    .interactive()
 )
 
-st.bar_chart(
-    monthly_spend,
+st.altair_chart(
+    spend_chart,
     use_container_width=True,
+    theme="streamlit",
 )
 
 
@@ -316,19 +462,27 @@ st.bar_chart(
 # CUSTOMER EXPERIENCE
 # --------------------------------------------------
 
-st.subheader("Customer experience")
+st.subheader(
+    "Customer experience"
+)
 
-experience_left, experience_right = st.columns(2)
+experience_left, experience_right = (
+    st.columns(2)
+)
 
 with experience_left:
 
-    if pd.notna(average_review):
+    if pd.notna(
+        average_review
+    ):
+
         st.metric(
             "Average review score",
             f"{average_review:.1f} / 5",
         )
 
     else:
+
         st.write(
             "No review score available."
         )
