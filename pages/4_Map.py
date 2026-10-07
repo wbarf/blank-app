@@ -4,139 +4,343 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-st.title("Risk Map Across Brazil")
-st.write(
-    "Each bubble represents a risk account. Higher risk scores produce larger "
-    "bubbles; colors show relative risk within the accounts listed."
-)
 
+# --------------------------------------------------
+# DATA
+# --------------------------------------------------
 
 @st.cache_data
 def load_risk_locations():
     data_dir = Path(__file__).resolve().parents[1] / "Analysis"
+
     risks = pd.read_csv(
         data_dir / "current_at_risk_accounts.csv",
         dtype={"account_id": str},
     )
+
     locations = pd.read_csv(
         data_dir / "geolocation.csv",
         dtype={"account_id": str},
-        usecols=["account_id", "lat", "lng", "city", "state"],
+        usecols=[
+            "account_id",
+            "lat",
+            "lng",
+            "city",
+            "state",
+        ],
     )
 
     return risks.merge(
         locations,
         on="account_id",
         how="left",
-        validate="one_to_one",
     )
 
 
 try:
     risks = load_risk_locations()
+
 except FileNotFoundError as exc:
-    st.error(f"Map data file not found: {exc.filename}")
+    st.error(
+        f"Map data file not found: {exc.filename}"
+    )
     st.stop()
 
-if risks.empty:
-    st.info("There are no risk accounts to display.")
-    st.stop()
 
-risks["lat"] = pd.to_numeric(risks["lat"], errors="coerce")
-risks["lng"] = pd.to_numeric(risks["lng"], errors="coerce")
-risks["risk_score"] = pd.to_numeric(risks["risk_score"], errors="coerce")
-risks["churn_probability"] = pd.to_numeric(
-    risks["churn_probability"], errors="coerce"
+# --------------------------------------------------
+# PREPARE DATA
+# --------------------------------------------------
+
+risks["lat"] = pd.to_numeric(
+    risks["lat"],
+    errors="coerce",
 )
-risks["total_spend"] = pd.to_numeric(risks["total_spend"], errors="coerce")
 
-mapped_risks = risks.dropna(subset=["lat", "lng", "risk_score"]).copy()
-missing_coordinates = len(risks) - len(mapped_risks)
+risks["lng"] = pd.to_numeric(
+    risks["lng"],
+    errors="coerce",
+)
+
+risks["risk_score"] = pd.to_numeric(
+    risks["risk_score"],
+    errors="coerce",
+)
+
+risks["churn_probability"] = pd.to_numeric(
+    risks["churn_probability"],
+    errors="coerce",
+)
+
+risks["total_spend"] = pd.to_numeric(
+    risks["total_spend"],
+    errors="coerce",
+)
+
+risks["churn_pct"] = (
+    risks["churn_probability"] * 100
+)
+
+mapped_risks = risks.dropna(
+    subset=["lat", "lng", "risk_score"]
+).copy()
+
+missing_coordinates = (
+    len(risks) - len(mapped_risks)
+)
 
 if mapped_risks.empty:
-    st.error("No risk accounts have valid coordinates and risk scores.")
+    st.error(
+        "No at-risk accounts have valid map coordinates."
+    )
     st.stop()
 
-low_cut = mapped_risks["risk_score"].quantile(1 / 3)
-high_cut = mapped_risks["risk_score"].quantile(2 / 3)
 
-mapped_risks["risk_band"] = "Medium"
-mapped_risks.loc[mapped_risks["risk_score"] < low_cut, "risk_band"] = "Lower"
-mapped_risks.loc[mapped_risks["risk_score"] >= high_cut, "risk_band"] = "Higher"
+# --------------------------------------------------
+# PAGE HEADER
+# --------------------------------------------------
 
-band_colors = {
-    "Lower": [42, 157, 143],
-    "Medium": [244, 162, 97],
-    "Higher": [214, 40, 40],
-}
-mapped_risks["color"] = mapped_risks["risk_band"].map(band_colors)
+st.title("Risk Map")
 
-score_min = mapped_risks["risk_score"].min()
-score_range = mapped_risks["risk_score"].max() - score_min
-if score_range == 0:
-    mapped_risks["radius_px"] = 16.0
-else:
-    mapped_risks["radius_px"] = (
-        8 + (mapped_risks["risk_score"] - score_min) / score_range * 24
+st.write(
+    "Explore where the identified at-risk accounts are located. "
+    "Marker colour represents predicted churn risk, while marker size "
+    "represents Priority Score."
+)
+
+st.divider()
+
+
+# --------------------------------------------------
+# SUMMARY METRICS
+# --------------------------------------------------
+
+m1, m2, m3 = st.columns(3)
+
+m1.metric(
+    "Accounts on map",
+    len(mapped_risks),
+)
+
+m2.metric(
+    "Highest priority score",
+    f"{mapped_risks['risk_score'].max():,.0f}",
+)
+
+m3.metric(
+    "Missing coordinates",
+    missing_coordinates,
+)
+
+st.divider()
+
+
+# --------------------------------------------------
+# FILTERS
+# --------------------------------------------------
+
+st.subheader("Filter map")
+
+filter1, filter2 = st.columns(2)
+
+with filter1:
+    minimum_risk = st.slider(
+        "Minimum predicted churn risk",
+        min_value=0,
+        max_value=100,
+        value=0,
+        step=5,
+        format="%d%%",
     )
 
-mapped_risks["churn_pct"] = (
-    mapped_risks["churn_probability"].mul(100).round(1).fillna(0)
-)
-mapped_risks["risk_score"] = mapped_risks["risk_score"].round(0).astype(int)
-mapped_risks["total_spend"] = mapped_risks["total_spend"].round(2).fillna(0)
+with filter2:
+    minimum_value = st.number_input(
+        "Minimum customer value ($)",
+        min_value=0,
+        value=0,
+        step=500,
+    )
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Risk accounts plotted", f"{len(mapped_risks):,}")
-col2.metric("Highest risk score", f"{mapped_risks['risk_score'].max():,.0f}")
-col3.metric("Missing coordinates", f"{missing_coordinates:,}")
 
-st.markdown(
-    """
-    <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0 1rem;">
-      <span><span style="color:#2a9d8f;">●</span> Lower relative risk</span>
-      <span><span style="color:#f4a261;">●</span> Medium relative risk</span>
-      <span><span style="color:#d62828;">●</span> Higher relative risk</span>
-    </div>
-    """,
-    unsafe_allow_html=True,
+filtered = mapped_risks[
+    (
+        mapped_risks["churn_pct"]
+        >= minimum_risk
+    )
+    &
+    (
+        mapped_risks["total_spend"]
+        >= minimum_value
+    )
+].copy()
+
+
+st.caption(
+    f"Showing {len(filtered)} of "
+    f"{len(mapped_risks)} mapped at-risk accounts."
 )
+
+if filtered.empty:
+    st.info(
+        "No accounts match the selected filters."
+    )
+    st.stop()
+
+
+# --------------------------------------------------
+# MAP VISUAL VARIABLES
+# --------------------------------------------------
+
+score_min = filtered["risk_score"].min()
+score_max = filtered["risk_score"].max()
+
+if score_max == score_min:
+    filtered["radius"] = 13
+else:
+    filtered["radius"] = (
+        8
+        + (
+            (
+                filtered["risk_score"]
+                - score_min
+            )
+            /
+            (
+                score_max
+                - score_min
+            )
+        )
+        * 14
+    )
+
+
+def risk_color(churn_probability):
+
+    if churn_probability >= 0.80:
+        return [227, 0, 27, 205]
+
+    elif churn_probability >= 0.50:
+        return [240, 130, 30, 195]
+
+    return [0, 122, 51, 190]
+
+
+filtered["color"] = (
+    filtered["churn_probability"]
+    .apply(risk_color)
+)
+
+filtered["churn_display"] = (
+    filtered["churn_pct"]
+    .round(1)
+)
+
+filtered["priority_display"] = (
+    filtered["risk_score"]
+    .round(0)
+    .astype(int)
+)
+
+filtered["value_display"] = (
+    filtered["total_spend"]
+    .round(2)
+)
+
+
+# --------------------------------------------------
+# LEGEND
+# --------------------------------------------------
+
+legend1, legend2, legend3 = st.columns(3)
+
+with legend1:
+    st.markdown(
+        "🟢 **Below 50%** predicted churn risk"
+    )
+
+with legend2:
+    st.markdown(
+        "🟠 **50–79.9%** predicted churn risk"
+    )
+
+with legend3:
+    st.markdown(
+        "🔴 **80%+** predicted churn risk"
+    )
+
+st.caption(
+    "Marker size reflects Priority Score, which combines predicted churn risk "
+    "with customer value."
+)
+
+
+# --------------------------------------------------
+# MAP
+# --------------------------------------------------
 
 layer = pdk.Layer(
     "ScatterplotLayer",
-    data=mapped_risks,
+    data=filtered,
     get_position="[lng, lat]",
-    get_radius="radius_px",
+    get_radius="radius",
     radius_units="pixels",
-    radius_min_pixels=6,
-    radius_max_pixels=34,
+    radius_min_pixels=7,
+    radius_max_pixels=24,
     get_fill_color="color",
-    get_line_color=[255, 255, 255, 220],
+    get_line_color=[255, 255, 255],
     line_width_min_pixels=1,
     stroked=True,
-    opacity=0.78,
     pickable=True,
 )
 
+
 deck = pdk.Deck(
     layers=[layer],
+
     initial_view_state=pdk.ViewState(
-        latitude=-14.235,
-        longitude=-51.925,
-        zoom=3.1,
+        latitude=-15.5,
+        longitude=-51.5,
+        zoom=3.25,
         pitch=0,
     ),
-    map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+
+    map_style=(
+        "https://basemaps.cartocdn.com/gl/"
+        "positron-gl-style/style.json"
+    ),
+
     tooltip={
         "html": (
             "<b>{account_id}</b><br/>"
-            "{city}, {state}<br/>"
-            "Risk score: {risk_score}<br/>"
-            "Churn probability: {churn_pct}%<br/>"
-            "Total spend: {total_spend}"
+            "{city}, {state}<br/><br/>"
+            "Predicted churn risk: "
+            "<b>{churn_display}%</b><br/>"
+            "Customer value: "
+            "<b>${value_display}</b><br/>"
+            "Priority score: "
+            "<b>{priority_display}</b>"
         ),
-        "style": {"backgroundColor": "white", "color": "#222"},
+
+        "style": {
+            "backgroundColor": "white",
+            "color": "#222222",
+        },
     },
 )
 
-st.pydeck_chart(deck, use_container_width=True, height=680)
+
+st.pydeck_chart(
+    deck,
+    use_container_width=True,
+    height=650,
+)
+
+
+# --------------------------------------------------
+# EXPLANATION
+# --------------------------------------------------
+
+st.info(
+    "The map helps the sales representative identify clusters of "
+    "high-priority accounts that could be combined into the same visit route. "
+    "Today's Route focuses on the 10 accounts that should receive attention first."
+)
