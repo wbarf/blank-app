@@ -381,41 +381,48 @@ st.altair_chart(
 # MONTHLY SPEND
 # --------------------------------------------------
 
-st.subheader(
-    "Monthly spend"
-)
+st.subheader("Monthly spend")
 
-# Create a normal datetime month column
-monthly_spend = account_orders.copy()
-
-monthly_spend["month"] = (
-    monthly_spend["order_date"]
-    .dt.to_period("M")
-    .dt.to_timestamp()
-)
-
+# Keep the original calculation that was already working
 monthly_spend = (
-    monthly_spend
+    account_orders
     .groupby(
-        "month",
-        as_index=False,
+        account_orders["order_date"].dt.to_period("M")
     )["price"]
     .sum()
 )
 
-monthly_spend = monthly_spend.rename(
-    columns={
-        "price": "Spend"
-    }
+# Convert the result to a dataframe for Altair
+monthly_spend_df = monthly_spend.reset_index()
+
+monthly_spend_df.columns = [
+    "month",
+    "spend",
+]
+
+# Convert Period values to simple strings.
+# This avoids Altair/Vega-Lite issues with pandas Period objects.
+monthly_spend_df["month"] = (
+    monthly_spend_df["month"]
+    .astype(str)
+)
+
+monthly_spend_df["spend"] = pd.to_numeric(
+    monthly_spend_df["spend"],
+    errors="coerce",
+)
+
+monthly_spend_df = monthly_spend_df.dropna(
+    subset=["spend"]
 )
 
 
 # --------------------------------------------------
-# DYNAMIC MONTHLY SPEND CHART
+# MONTHLY SPEND CHART
 # --------------------------------------------------
 
 spend_chart = (
-    alt.Chart(monthly_spend)
+    alt.Chart(monthly_spend_df)
     .mark_bar(
         color="#00843D",
         cornerRadiusTopLeft=3,
@@ -423,28 +430,27 @@ spend_chart = (
     )
     .encode(
         x=alt.X(
-            "month:T",
+            "month:N",
             title="Month",
+            sort=None,
             axis=alt.Axis(
-                format="%b %Y",
                 labelAngle=-45,
             ),
         ),
         y=alt.Y(
-            "Spend:Q",
+            "spend:Q",
             title="Spend ($)",
             scale=alt.Scale(
-                zero=True
+                zero=True,
             ),
         ),
         tooltip=[
             alt.Tooltip(
-                "month:T",
+                "month:N",
                 title="Month",
-                format="%B %Y",
             ),
             alt.Tooltip(
-                "Spend:Q",
+                "spend:Q",
                 title="Spend",
                 format="$,.2f",
             ),
@@ -453,7 +459,6 @@ spend_chart = (
     .properties(
         height=320
     )
-    .interactive()
 )
 
 st.altair_chart(
