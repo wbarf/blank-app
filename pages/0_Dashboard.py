@@ -6,6 +6,11 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
+
+# --------------------------------------------------
+# STYLING
+# --------------------------------------------------
+
 st.markdown(
     """
     <style>
@@ -16,6 +21,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # --------------------------------------------------
 # DATA
@@ -54,6 +60,72 @@ def load_app_data():
     )
 
     return risks, lines, reviews
+
+
+# --------------------------------------------------
+# COMMENT TRANSLATION
+# --------------------------------------------------
+
+@st.cache_data
+def translate_comment(comment):
+    """
+    Translate a customer comment into English.
+
+    The translated result is cached so the same comment does not
+    generate another Gemini request every time Streamlit reruns.
+    """
+
+    if comment == "No written feedback provided.":
+        return comment
+
+    try:
+        client = genai.Client(
+            api_key=st.secrets["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(
+                timeout=15_000
+            ),
+        )
+
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=(
+                    "Translate the following customer review into natural "
+                    "English. Return only the translation, with no explanation."
+                    "\n\n"
+                    f"{comment}"
+                ),
+                config={
+                    "max_output_tokens": 150,
+                    "thinking_config": {
+                        "thinking_level": "low",
+                    },
+                },
+            )
+
+        except Exception:
+            # Fallback if the primary Gemini model is unavailable
+            response = client.models.generate_content(
+                model="gemini-3.7-flash",
+                contents=(
+                    "Translate the following customer review into natural "
+                    "English. Return only the translation, with no explanation."
+                    "\n\n"
+                    f"{comment}"
+                ),
+                config={
+                    "max_output_tokens": 150,
+                    "thinking_config": {
+                        "thinking_level": "low",
+                    },
+                },
+            )
+
+        return response.text.strip()
+
+    except Exception:
+        # Keep the dashboard usable if translation is unavailable
+        return comment
 
 
 risks_df, lines_df, reviews_df = load_app_data()
@@ -346,6 +418,11 @@ if not order_review.empty:
         comment = str(msg)
 
 
+# Translate the comment into English.
+# The function is cached, so identical comments are not translated repeatedly.
+translated_comment = translate_comment(comment)
+
+
 # --------------------------------------------------
 # ACCOUNT SUMMARY
 # --------------------------------------------------
@@ -419,7 +496,8 @@ with detail_right:
         "**Latest customer comment:**"
     )
 
-    st.write(comment)
+    # Display English translation
+    st.write(translated_comment)
 
 
 # --------------------------------------------------
@@ -474,7 +552,7 @@ Latest order value: ${latest_order_total:,.2f}
 Latest freight cost: ${freight_total:,.2f}
 Latest delivery was late: {was_late}
 Average review score: {review_value}
-Latest written feedback: {comment}
+Latest written feedback: {translated_comment}
 
 Create a concise sales recommendation using exactly these headings:
 
@@ -518,6 +596,7 @@ RULES
                 )
 
             except Exception:
+                # Fallback if the primary Gemini model is unavailable
                 response = client.models.generate_content(
                     model="gemini-3.7-flash",
                     contents=prompt,
