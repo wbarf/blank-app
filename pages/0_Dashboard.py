@@ -19,9 +19,46 @@ st.markdown(
         color: #00843D !important;
     }
 
+    /* White text on primary/red buttons */
     button[kind="primary"],
     button[kind="primary"] p,
     button[kind="primary"] span {
+        color: white !important;
+    }
+
+    /* Green "View on map" buttons */
+    div[class*="st-key-map_"] button {
+        background-color: #00843D !important;
+        border-color: #00843D !important;
+        color: white !important;
+    }
+
+    div[class*="st-key-map_"] button p,
+    div[class*="st-key-map_"] button span {
+        color: white !important;
+    }
+
+    div[class*="st-key-map_"] button:hover {
+        background-color: #006B31 !important;
+        border-color: #006B31 !important;
+        color: white !important;
+    }
+
+    /* Green "Show all accounts" button */
+    div[class*="st-key-show_all_accounts"] button {
+        background-color: #00843D !important;
+        border-color: #00843D !important;
+        color: white !important;
+    }
+
+    div[class*="st-key-show_all_accounts"] button p,
+    div[class*="st-key-show_all_accounts"] button span {
+        color: white !important;
+    }
+
+    div[class*="st-key-show_all_accounts"] button:hover {
+        background-color: #006B31 !important;
+        border-color: #006B31 !important;
         color: white !important;
     }
     </style>
@@ -47,7 +84,10 @@ def load_app_data():
         data_dir / "order_lines.csv",
         dtype={"account_id": str, "order_id": str},
     )
-    lines["order_date"] = pd.to_datetime(lines["order_date"])
+
+    lines["order_date"] = pd.to_datetime(
+        lines["order_date"]
+    )
 
     reviews = pd.read_csv(
         data_dir / "order_reviews.csv",
@@ -57,7 +97,13 @@ def load_app_data():
     locations = pd.read_csv(
         data_dir / "geolocation.csv",
         dtype={"account_id": str},
-        usecols=["account_id", "lat", "lng", "city", "state"],
+        usecols=[
+            "account_id",
+            "lat",
+            "lng",
+            "city",
+            "state",
+        ],
     )
 
     risks = risks.merge(
@@ -80,6 +126,7 @@ def translate_comment(comment):
         return comment
 
     try:
+
         client = genai.Client(
             api_key=st.secrets["GEMINI_API_KEY"],
             http_options=types.HttpOptions(
@@ -90,8 +137,8 @@ def translate_comment(comment):
         response = client.models.generate_content(
             model="gemini-3.8-flash",
             contents=(
-                "Translate the following Brazilian Portuguese customer "
-                "review into natural English. "
+                "Translate the following Brazilian Portuguese "
+                "customer review into natural English. "
                 "Return only the English translation. "
                 "Do not add an explanation.\n\n"
                 f"{comment}"
@@ -107,6 +154,7 @@ def translate_comment(comment):
         return response.text.strip()
 
     except Exception:
+
         return comment
 
 
@@ -123,7 +171,9 @@ risks_df = risks_df.sort_values(
 
 top_accounts = risks_df.head(10).copy()
 
-account_options = top_accounts["account_id"].tolist()
+account_options = (
+    top_accounts["account_id"].tolist()
+)
 
 
 # --------------------------------------------------
@@ -131,7 +181,9 @@ account_options = top_accounts["account_id"].tolist()
 # --------------------------------------------------
 
 if "selected_account" not in st.session_state:
-    st.session_state.selected_account = account_options[0]
+    st.session_state.selected_account = (
+        account_options[0]
+    )
 
 if "map_account" not in st.session_state:
     st.session_state.map_account = None
@@ -157,7 +209,8 @@ st.title("Today's Route")
 
 st.write(
     "Focus on the highest-priority at-risk accounts. "
-    "Priority Score combines predicted churn risk with customer value."
+    "Priority Score combines predicted churn risk "
+    "with customer value."
 )
 
 st.divider()
@@ -191,7 +244,9 @@ st.divider()
 # TOP SECTION
 # --------------------------------------------------
 
-left, right = st.columns([1, 1.2])
+left, right = st.columns(
+    [1, 1.2]
+)
 
 
 # --------------------------------------------------
@@ -200,22 +255,36 @@ left, right = st.columns([1, 1.2])
 
 with left:
 
-    st.subheader("Top 10 Priority Accounts")
-
-    st.caption(
-        "Select an account to view its details or location."
+    st.subheader(
+        "Top 10 Priority Accounts"
     )
 
-    with st.container(height=540):
+    st.caption(
+        "Select an account to view its details "
+        "or location."
+    )
+
+    with st.container(
+        height=540
+    ):
 
         for _, row in top_accounts.iterrows():
 
             account_id = row["account_id"]
-            churn_risk = row["churn_probability"] * 100
-            risk_score = row["risk_score"]
-            customer_value = row["total_spend"]
 
-            with st.container(border=True):
+            churn_risk = (
+                row["churn_probability"] * 100
+            )
+
+            risk_score = row["risk_score"]
+
+            customer_value = (
+                row["total_spend"]
+            )
+
+            with st.container(
+                border=True
+            ):
 
                 st.markdown(
                     f"### {account_id}"
@@ -234,16 +303,27 @@ with left:
                 )
 
                 st.write(
-                    f"**Customer value:** ${customer_value:,.2f}"
+                    f"**Customer value:** "
+                    f"${customer_value:,.2f}"
                 )
 
-                if pd.notna(row["city"]):
+                if pd.notna(
+                    row["city"]
+                ):
+
                     st.write(
                         f"**Location:** "
-                        f"{str(row['city']).title()}, {row['state']}"
+                        f"{str(row['city']).title()}, "
+                        f"{row['state']}"
                     )
 
-                button_left, button_right = st.columns(2)
+                button_left, button_right = (
+                    st.columns(2)
+                )
+
+                # ------------------------------
+                # VIEW DETAILS
+                # ------------------------------
 
                 with button_left:
 
@@ -253,9 +333,18 @@ with left:
                         use_container_width=True,
                         type="primary",
                     ):
-                        st.session_state.selected_account = account_id
+
+                        st.session_state.selected_account = (
+                            account_id
+                        )
+
                         st.session_state.scroll_request += 1
+
                         st.rerun()
+
+                # ------------------------------
+                # VIEW ON MAP
+                # ------------------------------
 
                 with button_right:
 
@@ -270,8 +359,13 @@ with left:
                         use_container_width=True,
                         disabled=not location_available,
                     ):
-                        st.session_state.map_account = account_id
+
+                        st.session_state.map_account = (
+                            account_id
+                        )
+
                         st.session_state.map_scroll_request += 1
+
                         st.rerun()
 
 
@@ -286,7 +380,11 @@ with right:
         anchor="route-map",
     )
 
-    # Automatically scroll to map
+
+    # --------------------------------------------------
+    # AUTOMATIC SCROLL TO MAP
+    # --------------------------------------------------
+
     if (
         st.session_state.map_scroll_request
         != st.session_state.last_map_scroll_request
@@ -305,10 +403,13 @@ with right:
 
                 function scrollToMap() {{
 
-                    const doc = window.parent.document;
+                    const doc =
+                        window.parent.document;
 
                     const target =
-                        doc.getElementById("route-map");
+                        doc.getElementById(
+                            "route-map"
+                        );
 
                     if (target) {{
 
@@ -320,10 +421,16 @@ with right:
                         return;
                     }}
 
-                    setTimeout(scrollToMap, 100);
+                    setTimeout(
+                        scrollToMap,
+                        100
+                    );
                 }}
 
-                setTimeout(scrollToMap, 250);
+                setTimeout(
+                    scrollToMap,
+                    250
+                );
 
             }})();
             </script>
@@ -335,12 +442,56 @@ with right:
             st.session_state.map_scroll_request
         )
 
-    st.caption(
-        "The map shows today's 10 highest-priority accounts."
-    )
+
+    # --------------------------------------------------
+    # MAP HEADER / BACK BUTTON
+    # --------------------------------------------------
+
+    if (
+        st.session_state.map_account
+        is not None
+    ):
+
+        map_header_left, map_header_right = (
+            st.columns([1.5, 1])
+        )
+
+        with map_header_left:
+
+            st.caption(
+                f"Showing Account "
+                f"{st.session_state.map_account}"
+            )
+
+        with map_header_right:
+
+            if st.button(
+                "← Show all accounts",
+                key="show_all_accounts",
+                use_container_width=True,
+            ):
+
+                st.session_state.map_account = None
+
+                st.rerun()
+
+    else:
+
+        st.caption(
+            "The map shows today's 10 "
+            "highest-priority accounts."
+        )
+
+
+    # --------------------------------------------------
+    # MAP DATA
+    # --------------------------------------------------
 
     map_data = top_accounts.dropna(
-        subset=["lat", "lng"]
+        subset=[
+            "lat",
+            "lng",
+        ]
     ).copy()
 
     map_data["lat"] = pd.to_numeric(
@@ -354,11 +505,15 @@ with right:
     )
 
     map_data = map_data.dropna(
-        subset=["lat", "lng"]
+        subset=[
+            "lat",
+            "lng",
+        ]
     )
 
     map_data["churn_pct"] = (
-        map_data["churn_probability"] * 100
+        map_data["churn_probability"]
+        * 100
     ).round(1)
 
     map_data["risk_score_display"] = (
@@ -367,8 +522,18 @@ with right:
         .astype(int)
     )
 
-    score_min = map_data["risk_score"].min()
-    score_max = map_data["risk_score"].max()
+
+    # --------------------------------------------------
+    # MARKER SIZE
+    # --------------------------------------------------
+
+    score_min = (
+        map_data["risk_score"].min()
+    )
+
+    score_max = (
+        map_data["risk_score"].max()
+    )
 
     if score_max == score_min:
 
@@ -379,8 +544,14 @@ with right:
         map_data["radius"] = (
             12
             + (
-                (map_data["risk_score"] - score_min)
-                / (score_max - score_min)
+                (
+                    map_data["risk_score"]
+                    - score_min
+                )
+                / (
+                    score_max
+                    - score_min
+                )
             )
             * 18
         )
@@ -394,7 +565,10 @@ with right:
     map_longitude = -51.925
     map_zoom = 3.1
 
-    if st.session_state.map_account is not None:
+    if (
+        st.session_state.map_account
+        is not None
+    ):
 
         selected_map_row = map_data[
             map_data["account_id"]
@@ -403,7 +577,9 @@ with right:
 
         if not selected_map_row.empty:
 
-            selected_map_row = selected_map_row.iloc[0]
+            selected_map_row = (
+                selected_map_row.iloc[0]
+            )
 
             map_latitude = float(
                 selected_map_row["lat"]
@@ -420,15 +596,23 @@ with right:
     # NORMAL ACCOUNT MARKERS
     # --------------------------------------------------
 
-    normal_map_data = map_data.copy()
+    normal_map_data = (
+        map_data.copy()
+    )
 
-    if st.session_state.map_account is not None:
+    if (
+        st.session_state.map_account
+        is not None
+    ):
 
-        normal_map_data = normal_map_data[
-            normal_map_data["account_id"]
-            != st.session_state.map_account
-        ]
-
+        normal_map_data = (
+            normal_map_data[
+                normal_map_data[
+                    "account_id"
+                ]
+                != st.session_state.map_account
+            ]
+        )
 
     normal_layer = pdk.Layer(
         "ScatterplotLayer",
@@ -438,8 +622,17 @@ with right:
         radius_units="pixels",
         radius_min_pixels=10,
         radius_max_pixels=32,
-        get_fill_color=[0, 122, 51, 190],
-        get_line_color=[255, 255, 255],
+        get_fill_color=[
+            0,
+            122,
+            51,
+            190,
+        ],
+        get_line_color=[
+            255,
+            255,
+            255,
+        ],
         line_width_min_pixels=1,
         stroked=True,
         pickable=True,
@@ -450,9 +643,14 @@ with right:
     # SELECTED ACCOUNT MARKER
     # --------------------------------------------------
 
-    layers = [normal_layer]
+    layers = [
+        normal_layer
+    ]
 
-    if st.session_state.map_account is not None:
+    if (
+        st.session_state.map_account
+        is not None
+    ):
 
         highlighted_account = map_data[
             map_data["account_id"]
@@ -469,8 +667,17 @@ with right:
                 radius_units="pixels",
                 radius_min_pixels=20,
                 radius_max_pixels=36,
-                get_fill_color=[220, 0, 0, 230],
-                get_line_color=[255, 255, 255],
+                get_fill_color=[
+                    220,
+                    0,
+                    0,
+                    230,
+                ],
+                get_line_color=[
+                    255,
+                    255,
+                    255,
+                ],
                 line_width_min_pixels=3,
                 stroked=True,
                 pickable=True,
@@ -501,8 +708,10 @@ with right:
             "html": (
                 "<b>{account_id}</b><br/>"
                 "{city}, {state}<br/>"
-                "Churn risk: {churn_pct}%<br/>"
-                "Priority score: {risk_score_display}"
+                "Churn risk: "
+                "{churn_pct}%<br/>"
+                "Priority score: "
+                "{risk_score_display}"
             )
         },
     )
@@ -513,18 +722,14 @@ with right:
         height=540,
     )
 
-    if st.session_state.map_account is not None:
+    if (
+        st.session_state.map_account
+        is None
+    ):
 
         st.caption(
-            f"Showing Account "
-            f"{st.session_state.map_account}."
-        )
-
-    else:
-
-        st.caption(
-            "Use the Risk Map page for the full overview "
-            "of all at-risk accounts."
+            "Use the Risk Map page for the "
+            "full overview of all at-risk accounts."
         )
 
 
@@ -559,14 +764,18 @@ if (
         <script>
         (function() {{
 
-            const requestId = {scroll_number};
+            const requestId =
+                {scroll_number};
 
             function scrollToAccount() {{
 
-                const doc = window.parent.document;
+                const doc =
+                    window.parent.document;
 
                 const target =
-                    doc.getElementById("account-action");
+                    doc.getElementById(
+                        "account-action"
+                    );
 
                 if (target) {{
 
@@ -578,10 +787,16 @@ if (
                     return;
                 }}
 
-                setTimeout(scrollToAccount, 100);
+                setTimeout(
+                    scrollToAccount,
+                    100
+                );
             }}
 
-            setTimeout(scrollToAccount, 250);
+            setTimeout(
+                scrollToAccount,
+                250
+            );
 
         }})();
         </script>
@@ -595,8 +810,8 @@ if (
 
 
 st.write(
-    "Review recent account activity and generate an "
-    "AI-supported next action."
+    "Review recent account activity and "
+    "generate an AI-supported next action."
 )
 
 
@@ -604,8 +819,10 @@ st.write(
 # ACCOUNT SELECTOR
 # --------------------------------------------------
 
-selected_index = account_options.index(
-    st.session_state.selected_account
+selected_index = (
+    account_options.index(
+        st.session_state.selected_account
+    )
 )
 
 selected_account = st.selectbox(
@@ -614,7 +831,9 @@ selected_account = st.selectbox(
     index=selected_index,
 )
 
-st.session_state.selected_account = selected_account
+st.session_state.selected_account = (
+    selected_account
+)
 
 
 # --------------------------------------------------
@@ -631,9 +850,11 @@ account_orders = lines_df[
     == selected_account
 ].copy()
 
-account_orders = account_orders.sort_values(
-    "order_date",
-    ascending=False,
+account_orders = (
+    account_orders.sort_values(
+        "order_date",
+        ascending=False,
+    )
 )
 
 
@@ -641,45 +862,57 @@ account_orders = account_orders.sort_values(
 # ACCOUNT INFORMATION
 # --------------------------------------------------
 
-latest_order = account_orders.iloc[0]
+latest_order = (
+    account_orders.iloc[0]
+)
 
-latest_order_id = latest_order["order_id"]
+latest_order_id = (
+    latest_order["order_id"]
+)
 
 latest_order_lines = account_orders[
     account_orders["order_id"]
     == latest_order_id
 ]
 
-latest_order_date = latest_order[
-    "order_date"
-].strftime("%d %B %Y")
+latest_order_date = (
+    latest_order["order_date"]
+    .strftime("%d %B %Y")
+)
 
-latest_order_total = latest_order_lines[
-    "price"
-].sum()
+latest_order_total = (
+    latest_order_lines["price"]
+    .sum()
+)
 
-freight_total = latest_order_lines[
-    "freight_value"
-].sum()
+freight_total = (
+    latest_order_lines["freight_value"]
+    .sum()
+)
 
-was_late = latest_order_lines[
-    "is_late"
-].any()
+was_late = (
+    latest_order_lines["is_late"]
+    .any()
+)
 
-number_of_orders = account_orders[
-    "order_id"
-].nunique()
+number_of_orders = (
+    account_orders["order_id"]
+    .nunique()
+)
 
-average_review = account_orders[
-    "review_score"
-].mean()
+average_review = (
+    account_orders["review_score"]
+    .mean()
+)
 
 order_review = reviews_df[
     reviews_df["order_id"]
     == latest_order_id
 ]
 
-comment = "No written feedback provided."
+comment = (
+    "No written feedback provided."
+)
 
 if not order_review.empty:
 
@@ -688,6 +921,7 @@ if not order_review.empty:
     ]
 
     if pd.notna(msg):
+
         comment = str(msg)
 
 
@@ -695,8 +929,10 @@ if not order_review.empty:
 # TRANSLATE CUSTOMER COMMENT
 # --------------------------------------------------
 
-translated_comment = translate_comment(
-    comment
+translated_comment = (
+    translate_comment(
+        comment
+    )
 )
 
 
@@ -712,7 +948,9 @@ a, b, c = st.columns(3)
 
 a.metric(
     "Churn risk",
-    f"{selected_risk['churn_probability'] * 100:.1f}%",
+    (
+        f"{selected_risk['churn_probability'] * 100:.1f}%"
+    ),
 )
 
 b.metric(
@@ -730,7 +968,9 @@ c.metric(
 # ACCOUNT DETAILS
 # --------------------------------------------------
 
-detail_left, detail_right = st.columns(2)
+detail_left, detail_right = (
+    st.columns(2)
+)
 
 
 with detail_left:
@@ -740,11 +980,13 @@ with detail_left:
     )
 
     st.write(
-        f"**Last order:** {latest_order_date}"
+        f"**Last order:** "
+        f"{latest_order_date}"
     )
 
     st.write(
-        f"**Historical orders:** {number_of_orders}"
+        f"**Historical orders:** "
+        f"{number_of_orders}"
     )
 
     st.write(
@@ -776,7 +1018,9 @@ with detail_right:
         "### Customer experience"
     )
 
-    if pd.notna(average_review):
+    if pd.notna(
+        average_review
+    ):
 
         st.write(
             f"**Average review score:** "
@@ -808,8 +1052,9 @@ st.markdown(
 )
 
 st.write(
-    "Gemini turns the churn prediction and account history "
-    "into a practical next step for the sales representative."
+    "Gemini turns the churn prediction and "
+    "account history into a practical next "
+    "step for the sales representative."
 )
 
 if st.button(
@@ -820,7 +1065,9 @@ if st.button(
     try:
 
         client = genai.Client(
-            api_key=st.secrets["GEMINI_API_KEY"],
+            api_key=st.secrets[
+                "GEMINI_API_KEY"
+            ],
             http_options=types.HttpOptions(
                 timeout=30_000
             ),
@@ -889,28 +1136,32 @@ RULES
 
             try:
 
-                response = client.models.generate_content(
-                    model="gemini-3.8-flash",
-                    contents=prompt,
-                    config={
-                        "max_output_tokens": 300,
-                        "thinking_config": {
-                            "thinking_level": "low",
+                response = (
+                    client.models.generate_content(
+                        model="gemini-3.8-flash",
+                        contents=prompt,
+                        config={
+                            "max_output_tokens": 300,
+                            "thinking_config": {
+                                "thinking_level": "low",
+                            },
                         },
-                    },
+                    )
                 )
 
             except Exception:
 
-                response = client.models.generate_content(
-                    model="gemini-3.7-flash",
-                    contents=prompt,
-                    config={
-                        "max_output_tokens": 300,
-                        "thinking_config": {
-                            "thinking_level": "low",
+                response = (
+                    client.models.generate_content(
+                        model="gemini-3.7-flash",
+                        contents=prompt,
+                        config={
+                            "max_output_tokens": 300,
+                            "thinking_config": {
+                                "thinking_level": "low",
+                            },
                         },
-                    },
+                    )
                 )
 
         st.markdown(
@@ -926,5 +1177,6 @@ RULES
     except Exception as e:
 
         st.error(
-            f"Could not generate the AI recommendation: {e}"
+            "Could not generate the AI "
+            f"recommendation: {e}"
         )
