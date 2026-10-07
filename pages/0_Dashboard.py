@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 from google.genai import types
 
@@ -127,6 +128,9 @@ account_options = top_accounts["account_id"].tolist()
 if "selected_account" not in st.session_state:
     st.session_state.selected_account = account_options[0]
 
+if "scroll_to_account" not in st.session_state:
+    st.session_state.scroll_to_account = False
+
 
 # --------------------------------------------------
 # PAGE HEADER
@@ -228,6 +232,7 @@ with left:
                     use_container_width=True,
                 ):
                     st.session_state.selected_account = account_id
+                    st.session_state.scroll_to_account = True
                     st.rerun()
 
 
@@ -338,6 +343,37 @@ st.divider()
 # --------------------------------------------------
 # ACCOUNT ACTION SECTION
 # --------------------------------------------------
+
+# Invisible anchor used for automatic scrolling
+st.markdown(
+    '<div id="account-action"></div>',
+    unsafe_allow_html=True,
+)
+
+# Scroll here after clicking "View account details"
+if st.session_state.scroll_to_account:
+
+    components.html(
+        """
+        <script>
+            const element =
+                window.parent.document.getElementById("account-action");
+
+            if (element) {
+                setTimeout(() => {
+                    element.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start"
+                    });
+                }, 150);
+            }
+        </script>
+        """,
+        height=0,
+    )
+
+    st.session_state.scroll_to_account = False
+
 
 st.header("Account Action")
 
