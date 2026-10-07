@@ -99,9 +99,14 @@ def translate_comment(comment):
 
         return response.text.strip()
 
-    except Exception as e:
-        return f"Translation failed: {e}"
+    except Exception:
+        # Keep the dashboard usable if translation fails
+        return comment
 
+
+# --------------------------------------------------
+# LOAD DATA
+# --------------------------------------------------
 
 risks_df, lines_df, reviews_df = load_app_data()
 
@@ -111,6 +116,16 @@ risks_df = risks_df.sort_values(
 ).reset_index(drop=True)
 
 top_accounts = risks_df.head(10).copy()
+
+account_options = top_accounts["account_id"].tolist()
+
+
+# --------------------------------------------------
+# SESSION STATE
+# --------------------------------------------------
+
+if "selected_account" not in st.session_state:
+    st.session_state.selected_account = account_options[0]
 
 
 # --------------------------------------------------
@@ -167,7 +182,7 @@ with left:
     st.subheader("Top 10 Priority Accounts")
 
     st.caption(
-        "These accounts should receive attention first."
+        "Select an account to view more details."
     )
 
     with st.container(height=540):
@@ -206,6 +221,14 @@ with left:
                         f"**Location:** "
                         f"{str(row['city']).title()}, {row['state']}"
                     )
+
+                if st.button(
+                    "View account details →",
+                    key=f"view_{account_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_account = account_id
+                    st.rerun()
 
 
 # --------------------------------------------------
@@ -249,6 +272,7 @@ with right:
 
     if score_max == score_min:
         map_data["radius"] = 18
+
     else:
         map_data["radius"] = (
             12
@@ -318,14 +342,31 @@ st.divider()
 st.header("Account Action")
 
 st.write(
-    "Select one of today's priority accounts to review its recent activity "
-    "and generate an AI-supported next action."
+    "Review recent account activity and generate an "
+    "AI-supported next action."
+)
+
+
+# --------------------------------------------------
+# ACCOUNT SELECTOR
+# --------------------------------------------------
+
+selected_index = account_options.index(
+    st.session_state.selected_account
 )
 
 selected_account = st.selectbox(
-    "Select account",
-    top_accounts["account_id"].tolist(),
+    "Account",
+    account_options,
+    index=selected_index,
 )
+
+st.session_state.selected_account = selected_account
+
+
+# --------------------------------------------------
+# SELECTED ACCOUNT DATA
+# --------------------------------------------------
 
 selected_risk = top_accounts[
     top_accounts["account_id"] == selected_account
@@ -393,7 +434,10 @@ if not order_review.empty:
         comment = str(msg)
 
 
-# Translate the latest customer comment
+# --------------------------------------------------
+# TRANSLATE CUSTOMER COMMENT
+# --------------------------------------------------
+
 translated_comment = translate_comment(comment)
 
 
@@ -420,6 +464,11 @@ c.metric(
     f"{selected_risk['risk_score']:,.0f}",
 )
 
+
+# --------------------------------------------------
+# ACCOUNT DETAILS
+# --------------------------------------------------
+
 detail_left, detail_right = st.columns(2)
 
 with detail_left:
@@ -443,10 +492,13 @@ with detail_left:
     )
 
     if was_late:
+
         st.warning(
             "The latest delivery was late."
         )
+
     else:
+
         st.success(
             "The latest delivery was on time."
         )
@@ -457,11 +509,14 @@ with detail_right:
     st.markdown("### Customer experience")
 
     if pd.notna(average_review):
+
         st.write(
             f"**Average review score:** "
             f"{average_review:.1f} / 5"
         )
+
     else:
+
         st.write(
             "**Average review score:** No review data"
         )
@@ -470,18 +525,20 @@ with detail_right:
         "**Latest customer comment:**"
     )
 
-    st.write(translated_comment)
+    st.write(
+        translated_comment
+    )
 
 
 # --------------------------------------------------
-# GEMINI ACTION GENERATOR
+# AI RECOMMENDATION
 # --------------------------------------------------
 
 st.markdown("### AI Recommendation")
 
 st.write(
-    "Gemini turns the churn prediction and account history into a practical "
-    "next step for the sales representative."
+    "Gemini turns the churn prediction and account history "
+    "into a practical next step for the sales representative."
 )
 
 if st.button(
@@ -490,6 +547,7 @@ if st.button(
 ):
 
     try:
+
         client = genai.Client(
             api_key=st.secrets["GEMINI_API_KEY"],
             http_options=types.HttpOptions(
@@ -502,13 +560,6 @@ if st.button(
             if pd.notna(average_review)
             else "No review data available"
         )
-
-        # Use translated feedback when translation succeeded.
-        # Otherwise use the original customer comment.
-        if translated_comment.startswith("Translation failed:"):
-            recommendation_comment = comment
-        else:
-            recommendation_comment = translated_comment
 
         prompt = f"""
 You are an AI sales advisor supporting a Heineken sales representative.
@@ -532,7 +583,7 @@ Latest order value: ${latest_order_total:,.2f}
 Latest freight cost: ${freight_total:,.2f}
 Latest delivery was late: {was_late}
 Average review score: {review_value}
-Latest written feedback: {recommendation_comment}
+Latest written feedback: {translated_comment}
 
 Create a concise sales recommendation using exactly these headings:
 
@@ -561,9 +612,12 @@ RULES
 - Refer to the company as Heineken.
 """
 
-        with st.spinner("Generating recommendation..."):
+        with st.spinner(
+            "Generating recommendation..."
+        ):
 
             try:
+
                 response = client.models.generate_content(
                     model="gemini-3.8-flash",
                     contents=prompt,
@@ -576,6 +630,7 @@ RULES
                 )
 
             except Exception:
+
                 response = client.models.generate_content(
                     model="gemini-3.7-flash",
                     contents=prompt,
@@ -587,7 +642,9 @@ RULES
                     },
                 )
 
-        st.markdown(response.text)
+        st.markdown(
+            response.text
+        )
 
     except KeyError:
 
