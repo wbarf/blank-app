@@ -18,6 +18,13 @@ st.markdown(
     h1, h2, h3 {
         color: #00843D !important;
     }
+
+    /* White text on primary/red buttons */
+    button[kind="primary"],
+    button[kind="primary"] p,
+    button[kind="primary"] span {
+        color: white !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -128,8 +135,11 @@ account_options = top_accounts["account_id"].tolist()
 if "selected_account" not in st.session_state:
     st.session_state.selected_account = account_options[0]
 
-if "scroll_to_account" not in st.session_state:
-    st.session_state.scroll_to_account = False
+if "scroll_request" not in st.session_state:
+    st.session_state.scroll_request = 0
+
+if "last_scroll_request" not in st.session_state:
+    st.session_state.last_scroll_request = 0
 
 
 # --------------------------------------------------
@@ -230,9 +240,10 @@ with left:
                     "View account details →",
                     key=f"view_{account_id}",
                     use_container_width=True,
+                    type="primary",
                 ):
                     st.session_state.selected_account = account_id
-                    st.session_state.scroll_to_account = True
+                    st.session_state.scroll_request += 1
                     st.rerun()
 
 
@@ -276,9 +287,11 @@ with right:
     score_max = map_data["risk_score"].max()
 
     if score_max == score_min:
+
         map_data["radius"] = 18
 
     else:
+
         map_data["radius"] = (
             12
             + (
@@ -344,38 +357,62 @@ st.divider()
 # ACCOUNT ACTION SECTION
 # --------------------------------------------------
 
-# Invisible anchor used for automatic scrolling
-st.markdown(
-    '<div id="account-action"></div>',
-    unsafe_allow_html=True,
+st.header(
+    "Account Action",
+    anchor="account-action",
 )
 
-# Scroll here after clicking "View account details"
-if st.session_state.scroll_to_account:
+
+# --------------------------------------------------
+# AUTOMATIC SCROLL
+# --------------------------------------------------
+
+if (
+    st.session_state.scroll_request
+    != st.session_state.last_scroll_request
+):
+
+    scroll_number = st.session_state.scroll_request
 
     components.html(
-        """
+        f"""
         <script>
-            const element =
-                window.parent.document.getElementById("account-action");
+        (function() {{
 
-            if (element) {
-                setTimeout(() => {
-                    element.scrollIntoView({
+            const requestId = {scroll_number};
+
+            function scrollToAccount() {{
+
+                const doc = window.parent.document;
+
+                const target =
+                    doc.getElementById("account-action");
+
+                if (target) {{
+
+                    target.scrollIntoView({{
                         behavior: "smooth",
                         block: "start"
-                    });
-                }, 150);
-            }
+                    }});
+
+                    return;
+                }}
+
+                setTimeout(scrollToAccount, 100);
+            }}
+
+            setTimeout(scrollToAccount, 250);
+
+        }})();
         </script>
         """,
         height=0,
     )
 
-    st.session_state.scroll_to_account = False
+    st.session_state.last_scroll_request = (
+        st.session_state.scroll_request
+    )
 
-
-st.header("Account Action")
 
 st.write(
     "Review recent account activity and generate an "
@@ -481,7 +518,9 @@ translated_comment = translate_comment(comment)
 # ACCOUNT SUMMARY
 # --------------------------------------------------
 
-st.subheader(f"Account {selected_account}")
+st.subheader(
+    f"Account {selected_account}"
+)
 
 a, b, c = st.columns(3)
 
@@ -507,9 +546,12 @@ c.metric(
 
 detail_left, detail_right = st.columns(2)
 
+
 with detail_left:
 
-    st.markdown("### Recent activity")
+    st.markdown(
+        "### Recent activity"
+    )
 
     st.write(
         f"**Last order:** {latest_order_date}"
@@ -520,7 +562,8 @@ with detail_left:
     )
 
     st.write(
-        f"**Latest order value:** ${latest_order_total:,.2f}"
+        f"**Latest order value:** "
+        f"${latest_order_total:,.2f}"
     )
 
     st.write(
@@ -542,7 +585,9 @@ with detail_left:
 
 with detail_right:
 
-    st.markdown("### Customer experience")
+    st.markdown(
+        "### Customer experience"
+    )
 
     if pd.notna(average_review):
 
@@ -554,7 +599,8 @@ with detail_right:
     else:
 
         st.write(
-            "**Average review score:** No review data"
+            "**Average review score:** "
+            "No review data"
         )
 
     st.write(
@@ -570,7 +616,9 @@ with detail_right:
 # AI RECOMMENDATION
 # --------------------------------------------------
 
-st.markdown("### AI Recommendation")
+st.markdown(
+    "### AI Recommendation"
+)
 
 st.write(
     "Gemini turns the churn prediction and account history "
