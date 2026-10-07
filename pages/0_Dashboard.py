@@ -6,6 +6,16 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
+st.markdown(
+    """
+    <style>
+    h1, h2, h3 {
+        color: #00843D !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # --------------------------------------------------
 # DATA
