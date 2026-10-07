@@ -1,4 +1,4 @@
 streamlit
 pandas
 pydeck
-google-genai>=1.0.0
+google-genai==1.46.0
