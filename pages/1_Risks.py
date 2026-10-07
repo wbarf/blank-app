@@ -385,23 +385,28 @@ st.subheader(
     "Monthly spend"
 )
 
-monthly_spend = (
-    account_orders
-    .assign(
-        month=account_orders[
-            "order_date"
-        ].dt.to_period("M")
-    )
-    .groupby(
-        "month"
-    )["price"]
-    .sum()
-    .reset_index()
-)
+# Create a normal datetime month column
+monthly_spend = account_orders.copy()
 
 monthly_spend["month"] = (
-    monthly_spend["month"]
+    monthly_spend["order_date"]
+    .dt.to_period("M")
     .dt.to_timestamp()
+)
+
+monthly_spend = (
+    monthly_spend
+    .groupby(
+        "month",
+        as_index=False,
+    )["price"]
+    .sum()
+)
+
+monthly_spend = monthly_spend.rename(
+    columns={
+        "price": "Spend"
+    }
 )
 
 
@@ -426,7 +431,7 @@ spend_chart = (
             ),
         ),
         y=alt.Y(
-            "price:Q",
+            "Spend:Q",
             title="Spend ($)",
             scale=alt.Scale(
                 zero=True
@@ -439,7 +444,7 @@ spend_chart = (
                 format="%B %Y",
             ),
             alt.Tooltip(
-                "price:Q",
+                "Spend:Q",
                 title="Spend",
                 format="$,.2f",
             ),
@@ -456,7 +461,6 @@ st.altair_chart(
     use_container_width=True,
     theme="streamlit",
 )
-
 
 # --------------------------------------------------
 # CUSTOMER EXPERIENCE
