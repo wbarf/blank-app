@@ -19,7 +19,6 @@ st.markdown(
         color: #00843D !important;
     }
 
-    /* White text on primary/red buttons */
     button[kind="primary"],
     button[kind="primary"] p,
     button[kind="primary"] span {
@@ -108,7 +107,6 @@ def translate_comment(comment):
         return response.text.strip()
 
     except Exception:
-        # Keep the dashboard usable if translation fails
         return comment
 
 
@@ -135,11 +133,20 @@ account_options = top_accounts["account_id"].tolist()
 if "selected_account" not in st.session_state:
     st.session_state.selected_account = account_options[0]
 
+if "map_account" not in st.session_state:
+    st.session_state.map_account = None
+
 if "scroll_request" not in st.session_state:
     st.session_state.scroll_request = 0
 
 if "last_scroll_request" not in st.session_state:
     st.session_state.last_scroll_request = 0
+
+if "map_scroll_request" not in st.session_state:
+    st.session_state.map_scroll_request = 0
+
+if "last_map_scroll_request" not in st.session_state:
+    st.session_state.last_map_scroll_request = 0
 
 
 # --------------------------------------------------
@@ -196,7 +203,7 @@ with left:
     st.subheader("Top 10 Priority Accounts")
 
     st.caption(
-        "Select an account to view more details."
+        "Select an account to view its details or location."
     )
 
     with st.container(height=540):
@@ -236,15 +243,36 @@ with left:
                         f"{str(row['city']).title()}, {row['state']}"
                     )
 
-                if st.button(
-                    "View account details →",
-                    key=f"view_{account_id}",
-                    use_container_width=True,
-                    type="primary",
-                ):
-                    st.session_state.selected_account = account_id
-                    st.session_state.scroll_request += 1
-                    st.rerun()
+                button_left, button_right = st.columns(2)
+
+                with button_left:
+
+                    if st.button(
+                        "View details →",
+                        key=f"view_{account_id}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        st.session_state.selected_account = account_id
+                        st.session_state.scroll_request += 1
+                        st.rerun()
+
+                with button_right:
+
+                    location_available = (
+                        pd.notna(row["lat"])
+                        and pd.notna(row["lng"])
+                    )
+
+                    if st.button(
+                        "View on map",
+                        key=f"map_{account_id}",
+                        use_container_width=True,
+                        disabled=not location_available,
+                    ):
+                        st.session_state.map_account = account_id
+                        st.session_state.map_scroll_request += 1
+                        st.rerun()
 
 
 # --------------------------------------------------
@@ -253,7 +281,59 @@ with left:
 
 with right:
 
-    st.subheader("Suggested Route Area")
+    st.subheader(
+        "Suggested Route Area",
+        anchor="route-map",
+    )
+
+    # Automatically scroll to map
+    if (
+        st.session_state.map_scroll_request
+        != st.session_state.last_map_scroll_request
+    ):
+
+        map_scroll_number = (
+            st.session_state.map_scroll_request
+        )
+
+        components.html(
+            f"""
+            <script>
+            (function() {{
+
+                const requestId = {map_scroll_number};
+
+                function scrollToMap() {{
+
+                    const doc = window.parent.document;
+
+                    const target =
+                        doc.getElementById("route-map");
+
+                    if (target) {{
+
+                        target.scrollIntoView({{
+                            behavior: "smooth",
+                            block: "start"
+                        }});
+
+                        return;
+                    }}
+
+                    setTimeout(scrollToMap, 100);
+                }}
+
+                setTimeout(scrollToMap, 250);
+
+            }})();
+            </script>
+            """,
+            height=0,
+        )
+
+        st.session_state.last_map_scroll_request = (
+            st.session_state.map_scroll_request
+        )
 
     st.caption(
         "The map shows today's 10 highest-priority accounts."
@@ -271,6 +351,10 @@ with right:
     map_data["lng"] = pd.to_numeric(
         map_data["lng"],
         errors="coerce",
+    )
+
+    map_data = map_data.dropna(
+        subset=["lat", "lng"]
     )
 
     map_data["churn_pct"] = (
@@ -301,9 +385,54 @@ with right:
             * 18
         )
 
-    layer = pdk.Layer(
+
+    # --------------------------------------------------
+    # MAP VIEW
+    # --------------------------------------------------
+
+    map_latitude = -14.235
+    map_longitude = -51.925
+    map_zoom = 3.1
+
+    if st.session_state.map_account is not None:
+
+        selected_map_row = map_data[
+            map_data["account_id"]
+            == st.session_state.map_account
+        ]
+
+        if not selected_map_row.empty:
+
+            selected_map_row = selected_map_row.iloc[0]
+
+            map_latitude = float(
+                selected_map_row["lat"]
+            )
+
+            map_longitude = float(
+                selected_map_row["lng"]
+            )
+
+            map_zoom = 11
+
+
+    # --------------------------------------------------
+    # NORMAL ACCOUNT MARKERS
+    # --------------------------------------------------
+
+    normal_map_data = map_data.copy()
+
+    if st.session_state.map_account is not None:
+
+        normal_map_data = normal_map_data[
+            normal_map_data["account_id"]
+            != st.session_state.map_account
+        ]
+
+
+    normal_layer = pdk.Layer(
         "ScatterplotLayer",
-        data=map_data,
+        data=normal_map_data,
         get_position="[lng, lat]",
         get_radius="radius",
         radius_units="pixels",
@@ -316,12 +445,52 @@ with right:
         pickable=True,
     )
 
+
+    # --------------------------------------------------
+    # SELECTED ACCOUNT MARKER
+    # --------------------------------------------------
+
+    layers = [normal_layer]
+
+    if st.session_state.map_account is not None:
+
+        highlighted_account = map_data[
+            map_data["account_id"]
+            == st.session_state.map_account
+        ]
+
+        if not highlighted_account.empty:
+
+            highlight_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=highlighted_account,
+                get_position="[lng, lat]",
+                get_radius=26,
+                radius_units="pixels",
+                radius_min_pixels=20,
+                radius_max_pixels=36,
+                get_fill_color=[220, 0, 0, 230],
+                get_line_color=[255, 255, 255],
+                line_width_min_pixels=3,
+                stroked=True,
+                pickable=True,
+            )
+
+            layers.append(
+                highlight_layer
+            )
+
+
+    # --------------------------------------------------
+    # CREATE MAP
+    # --------------------------------------------------
+
     deck = pdk.Deck(
-        layers=[layer],
+        layers=layers,
         initial_view_state=pdk.ViewState(
-            latitude=-14.235,
-            longitude=-51.925,
-            zoom=3.1,
+            latitude=map_latitude,
+            longitude=map_longitude,
+            zoom=map_zoom,
             pitch=0,
         ),
         map_style=(
@@ -344,10 +513,19 @@ with right:
         height=540,
     )
 
-    st.caption(
-        "Use the Risk Map page for the full overview "
-        "of all at-risk accounts."
-    )
+    if st.session_state.map_account is not None:
+
+        st.caption(
+            f"Showing Account "
+            f"{st.session_state.map_account}."
+        )
+
+    else:
+
+        st.caption(
+            "Use the Risk Map page for the full overview "
+            "of all at-risk accounts."
+        )
 
 
 st.divider()
@@ -364,7 +542,7 @@ st.header(
 
 
 # --------------------------------------------------
-# AUTOMATIC SCROLL
+# AUTOMATIC SCROLL TO ACCOUNT
 # --------------------------------------------------
 
 if (
@@ -372,7 +550,9 @@ if (
     != st.session_state.last_scroll_request
 ):
 
-    scroll_number = st.session_state.scroll_request
+    scroll_number = (
+        st.session_state.scroll_request
+    )
 
     components.html(
         f"""
@@ -442,11 +622,13 @@ st.session_state.selected_account = selected_account
 # --------------------------------------------------
 
 selected_risk = top_accounts[
-    top_accounts["account_id"] == selected_account
+    top_accounts["account_id"]
+    == selected_account
 ].iloc[0]
 
 account_orders = lines_df[
-    lines_df["account_id"] == selected_account
+    lines_df["account_id"]
+    == selected_account
 ].copy()
 
 account_orders = account_orders.sort_values(
@@ -464,7 +646,8 @@ latest_order = account_orders.iloc[0]
 latest_order_id = latest_order["order_id"]
 
 latest_order_lines = account_orders[
-    account_orders["order_id"] == latest_order_id
+    account_orders["order_id"]
+    == latest_order_id
 ]
 
 latest_order_date = latest_order[
@@ -492,7 +675,8 @@ average_review = account_orders[
 ].mean()
 
 order_review = reviews_df[
-    reviews_df["order_id"] == latest_order_id
+    reviews_df["order_id"]
+    == latest_order_id
 ]
 
 comment = "No written feedback provided."
@@ -511,7 +695,9 @@ if not order_review.empty:
 # TRANSLATE CUSTOMER COMMENT
 # --------------------------------------------------
 
-translated_comment = translate_comment(comment)
+translated_comment = translate_comment(
+    comment
+)
 
 
 # --------------------------------------------------
@@ -567,7 +753,8 @@ with detail_left:
     )
 
     st.write(
-        f"**Freight:** ${freight_total:,.2f}"
+        f"**Freight:** "
+        f"${freight_total:,.2f}"
     )
 
     if was_late:
