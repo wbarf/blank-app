@@ -68,12 +68,6 @@ def load_app_data():
 
 @st.cache_data
 def translate_comment(comment):
-    """
-    Translate a customer comment into English.
-
-    The translated result is cached so the same comment does not
-    generate another Gemini request every time Streamlit reruns.
-    """
 
     if comment == "No written feedback provided.":
         return comment
@@ -82,50 +76,31 @@ def translate_comment(comment):
         client = genai.Client(
             api_key=st.secrets["GEMINI_API_KEY"],
             http_options=types.HttpOptions(
-                timeout=15_000
+                timeout=10_000
             ),
         )
 
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=(
-                    "Translate the following customer review into natural "
-                    "English. Return only the translation, with no explanation."
-                    "\n\n"
-                    f"{comment}"
-                ),
-                config={
-                    "max_output_tokens": 150,
-                    "thinking_config": {
-                        "thinking_level": "low",
-                    },
+        response = client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=(
+                "Translate the following Brazilian Portuguese customer "
+                "review into natural English. "
+                "Return only the English translation. "
+                "Do not add an explanation.\n\n"
+                f"{comment}"
+            ),
+            config={
+                "max_output_tokens": 100,
+                "thinking_config": {
+                    "thinking_level": "low",
                 },
-            )
-
-        except Exception:
-            # Fallback if the primary Gemini model is unavailable
-            response = client.models.generate_content(
-                model="gemini-3.7-flash",
-                contents=(
-                    "Translate the following customer review into natural "
-                    "English. Return only the translation, with no explanation."
-                    "\n\n"
-                    f"{comment}"
-                ),
-                config={
-                    "max_output_tokens": 150,
-                    "thinking_config": {
-                        "thinking_level": "low",
-                    },
-                },
-            )
+            },
+        )
 
         return response.text.strip()
 
-    except Exception:
-        # Keep the dashboard usable if translation is unavailable
-        return comment
+    except Exception as e:
+        return f"Translation failed: {e}"
 
 
 risks_df, lines_df, reviews_df = load_app_data()
@@ -418,8 +393,7 @@ if not order_review.empty:
         comment = str(msg)
 
 
-# Translate the comment into English.
-# The function is cached, so identical comments are not translated repeatedly.
+# Translate the latest customer comment
 translated_comment = translate_comment(comment)
 
 
@@ -496,7 +470,6 @@ with detail_right:
         "**Latest customer comment:**"
     )
 
-    # Display English translation
     st.write(translated_comment)
 
 
@@ -530,6 +503,13 @@ if st.button(
             else "No review data available"
         )
 
+        # Use translated feedback when translation succeeded.
+        # Otherwise use the original customer comment.
+        if translated_comment.startswith("Translation failed:"):
+            recommendation_comment = comment
+        else:
+            recommendation_comment = translated_comment
+
         prompt = f"""
 You are an AI sales advisor supporting a Heineken sales representative.
 
@@ -552,7 +532,7 @@ Latest order value: ${latest_order_total:,.2f}
 Latest freight cost: ${freight_total:,.2f}
 Latest delivery was late: {was_late}
 Average review score: {review_value}
-Latest written feedback: {translated_comment}
+Latest written feedback: {recommendation_comment}
 
 Create a concise sales recommendation using exactly these headings:
 
@@ -596,7 +576,6 @@ RULES
                 )
 
             except Exception:
-                # Fallback if the primary Gemini model is unavailable
                 response = client.models.generate_content(
                     model="gemini-3.7-flash",
                     contents=prompt,
