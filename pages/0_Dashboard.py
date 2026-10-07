@@ -493,19 +493,32 @@ RULES
 - Refer to the company as Heineken.
 """
 
-        with st.spinner(
-            "Generating recommendation..."
-        ):
-
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=prompt,
-                config={
-                    "max_output_tokens": 300,
+        with st.spinner("Generating recommendation..."):
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=prompt,
+            config={
+                "max_output_tokens": 300,
+                "thinking_config": {
+                    "thinking_level": "low",
                 },
-            )
+            },
+        )
+    except Exception:
+        # Fallback if Gemini 3.8 Flash is overloaded or times out
+        response = client.models.generate_content(
+            model="gemini-3.7-flash",
+            contents=prompt,
+            config={
+                "max_output_tokens": 300,
+                "thinking_config": {
+                    "thinking_level": "low",
+                },
+            },
+        )
 
-        st.markdown(response.text)
+st.markdown(response.text)
 
     except KeyError:
 
