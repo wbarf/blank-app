@@ -4,6 +4,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 from google import genai
+from google.genai import types
 
 
 # --------------------------------------------------
@@ -428,10 +429,12 @@ if st.button(
 ):
 
     try:
-
         client = genai.Client(
-            api_key=st.secrets["GEMINI_API_KEY"]
-        )
+    api_key=st.secrets["GEMINI_API_KEY"],
+    http_options=types.HttpOptions(
+        timeout=30_000
+    )
+)
 
         review_value = (
             f"{average_review:.1f} out of 5"
@@ -498,7 +501,7 @@ RULES
                 model="gemini-3.8-flash",
                 contents=prompt,
                 config={
-                    "max_output_tokens": 500,
+                    "max_output_tokens": 300,
                 },
             )
 
